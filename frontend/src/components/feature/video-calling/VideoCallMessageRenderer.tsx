@@ -35,7 +35,7 @@ const VideoCallCard = ({ data }: { data: RavenLiveKitRoom }) => {
             </Stack>
             <HStack>
                 <Button className="not-cal" asChild>
-                    <Link href={`/meeting-room/${data.name}`} target="_blank" weight='medium'>
+                    <Link href={`./meeting-room/${data.name}`} target="_blank" weight='medium'>
                         <BiPhone size={16} />
                         Join Call
                     </Link>
