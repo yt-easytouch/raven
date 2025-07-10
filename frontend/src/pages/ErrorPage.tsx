@@ -8,6 +8,8 @@ const ErrorPage = () => {
     let error = useRouteError();
 
     const errorDueToUpdate = (error as Error).message?.includes('Failed to fetch dynamically imported module:')
+        || (error as Error).message?.includes('Importing a module script failed.')
+        || (error as Error).message?.includes('error loading dynamically imported module')
 
     const navigate = useNavigate()
 
@@ -42,7 +44,7 @@ const ErrorPage = () => {
                     "A new update is available." :
                     "There was an unexpected error."}
                 </Heading>
-                <Text>If you face this error again, please report it either on <Link target='_blank' href='https://github.com/frappe/raven/issues'>GitHub</Link> or <Link target='_blank' href='https://support.ravenchat.ai/'> our support portal</Link>.</Text>
+                <Text>If you face this error again, please report it either on <Link target='_blank' href='https://github.com/The-Commit-Company/raven/issues'>GitHub</Link> or <Link target='_blank' href='https://support.ravenchat.ai/'> our support portal</Link>.</Text>
 
                 {!errorDueToUpdate && <details>
                     <summary><Text size='2'>Show error details</Text></summary>
@@ -51,16 +53,12 @@ const ErrorPage = () => {
                 }
                 <HStack justify='center'>
                     <Button
-                        // variant='ghost'
-                        variant='soft'
                         size='2'
-                        color='gray'
                         className='not-cal'
                         onClick={reloadPage}>
                         {errorDueToUpdate ? "Upgrade to a better experience" : "Reload the Page"}
                     </Button>
                     {!errorDueToUpdate && <Button
-                        // variant='ghost' 
                         variant='soft'
                         color='gray'
                         size='2' className='not-cal' onClick={goToChannels}>

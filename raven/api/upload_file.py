@@ -2,6 +2,7 @@ import base64
 import io
 from mimetypes import guess_type
 
+import blurhash
 import frappe
 from frappe import _
 from frappe.core.doctype.file.utils import get_local_image
@@ -116,7 +117,7 @@ def upload_file_with_message():
 
 	message_doc.reload()
 
-	message_doc.file = file_doc.unique_url
+	message_doc.file = file_doc.file_url
 
 	if file_doc.file_type in fileExt:
 
@@ -127,15 +128,25 @@ def upload_file_with_message():
 
 		MAX_WIDTH = 480
 		MAX_HEIGHT = 320
+		is_landscape = width > height
 
 		# If it's a landscape image, then the thumbnail needs to be 480px wide
-		if width > height:
+		if is_landscape:
 			thumbnail_width = min(width, MAX_WIDTH)
 			thumbnail_height = int(height * thumbnail_width / width)
 
 		else:
 			thumbnail_height = min(height, MAX_HEIGHT)
 			thumbnail_width = int(width * thumbnail_height / height)
+
+		image.thumbnail((thumbnail_width, thumbnail_height))
+
+		x_components = 4 if is_landscape else 3
+		y_components = 3 if is_landscape else 4
+
+		blurhash_string = blurhash.encode(image, x_components=x_components, y_components=y_components)
+
+		message_doc.blurhash = blurhash_string
 
 		# thumbnail_size = thumbnail_width, thumbnail_height
 

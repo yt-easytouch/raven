@@ -1,5 +1,5 @@
 import { ContextMenu, Flex } from '@radix-ui/themes'
-import { FileMessage, ImageMessage, Message } from '../../../../../../../types/Messaging/Message'
+import { FileMessage, Message } from '../../../../../../../types/Messaging/Message'
 import { useContext } from 'react'
 import { UserContext } from '@/utils/auth/UserProvider'
 import { BiBookmarkMinus, BiBookmarkPlus, BiCopy, BiDownload, BiLink, BiPaperclip, BiTrash } from 'react-icons/bi'
@@ -24,11 +24,12 @@ export interface MessageContextMenuProps {
     onForward: VoidFunction,
     onViewReaction?: VoidFunction,
     onAttachDocument: VoidFunction,
-    showThreadButton?: boolean
+    showThreadButton?: boolean,
+    selectedText?: string
 }
-export const MessageContextMenu = ({ message, onDelete, onEdit, onReply, onForward, showThreadButton, onAttachDocument, onViewReaction }: MessageContextMenuProps) => {
+export const MessageContextMenu = ({ message, onDelete, onEdit, onReply, onForward, showThreadButton, onAttachDocument, onViewReaction, selectedText }: MessageContextMenuProps) => {
 
-    const copy = useMessageCopy(message)
+    const copy = useMessageCopy(message, selectedText)
     const { currentUser } = useContext(UserContext)
 
     const isOwner = currentUser === message?.owner && !message?.is_bot_message
@@ -58,11 +59,11 @@ export const MessageContextMenu = ({ message, onDelete, onEdit, onReply, onForwa
                 <CopyMessageLink message={message} />
                 <ContextMenu.Separator />
                 <ContextMenu.Group>
-                    {message.message_type === 'Text' &&
+                    {(message.text || selectedText) &&
                         <ContextMenu.Item>
                             <Flex gap='2' width='100%' onClick={copy}>
                                 <BiCopy size='18' />
-                                Copy
+                                Copy {selectedText ? 'Selected Text' : ''}
                             </Flex>
                         </ContextMenu.Item>
                     }
@@ -144,9 +145,9 @@ const CopyMessageLink = ({ message }: { message: Message }) => {
 
         const isMessageInThread = threadID === message.channel_id
         if (isMessageInThread) {
-            navigator.clipboard.writeText(`${window.location.origin}${basePath}/${workspaceID}/threads/${threadID}?message_id=${message.name}`)
+            navigator.clipboard.writeText(`${window.location.origin}${basePath}/${encodeURIComponent(workspaceID ?? 'channels')}/threads/${encodeURIComponent(threadID)}?message_id=${encodeURIComponent(message.name)}`)
         } else {
-            navigator.clipboard.writeText(`${window.location.origin}${basePath}/${workspaceID}/${message.channel_id}?message_id=${message.name}`)
+            navigator.clipboard.writeText(`${window.location.origin}${basePath}/${encodeURIComponent(workspaceID ?? 'channels')}/${encodeURIComponent(message.channel_id)}?message_id=${encodeURIComponent(message.name)}`)
         }
         toast.success('Message link copied to clipboard')
     }

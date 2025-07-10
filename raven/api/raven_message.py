@@ -11,7 +11,9 @@ from raven.utils import get_channel_member, is_channel_member, track_channel_vis
 
 
 @frappe.whitelist(methods=["POST"])
-def send_message(channel_id, text, is_reply=False, linked_message=None, json_content=None):
+def send_message(
+	channel_id, text, is_reply=False, linked_message=None, json_content=None, send_silently=False
+):
 	if is_reply:
 		doc = frappe.get_doc(
 			{
@@ -34,6 +36,10 @@ def send_message(channel_id, text, is_reply=False, linked_message=None, json_con
 				"json": json_content,
 			}
 		)
+
+	if send_silently:
+		doc.flags.send_silently = True
+
 	doc.insert()
 	return doc
 
@@ -131,6 +137,7 @@ def get_pinned_messages(channel_id):
 			"name",
 			"owner",
 			"creation",
+			"bot",
 			"text",
 			"file",
 			"message_type",
@@ -143,6 +150,8 @@ def get_pinned_messages(channel_id):
 			"link_doctype",
 			"link_document",
 			"replied_message_details",
+			"hide_link_preview",
+			"is_bot_message",
 			"content",
 			"is_edited",
 			"is_thread",
@@ -180,6 +189,10 @@ def get_saved_messages():
 			raven_message.message_reactions,
 			raven_message._liked_by,
 			raven_channel.workspace,
+			raven_message.thumbnail_width,
+			raven_message.thumbnail_height,
+			raven_message.is_bot_message,
+			raven_message.bot,
 		)
 		.where(raven_message._liked_by.like("%" + frappe.session.user + "%"))
 		.where(
@@ -449,6 +462,8 @@ def get_all_files_shared_in_channel(
 	if file_type:
 		if file_type == "image":
 			query = query.where(message.message_type == "Image")
+		elif file_type == "file":
+			query = query.where(message.message_type == "File")
 		elif file_type == "pdf":
 			query = query.where(file.file_type == "pdf")
 		else:

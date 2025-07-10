@@ -41,6 +41,9 @@ class RavenAIFunction(Document):
 			"Update Multiple Documents",
 			"Delete Document",
 			"Delete Multiple Documents",
+			"Submit Document",
+			"Cancel Document",
+			"Get Amended Document",
 			"Custom Function",
 			"Send Message",
 			"Attach File to Document",
@@ -62,7 +65,13 @@ class RavenAIFunction(Document):
 		if self.type in WRITE_PERMISSIONS:
 			self.requires_write_permissions = 1
 
-		READ_PERMISSIONS = ["Get Document", "Get Multiple Documents", "Get Report Result", "Get List"]
+		READ_PERMISSIONS = [
+			"Get Document",
+			"Get Multiple Documents",
+			"Get Report Result",
+			"Get List",
+			"Get Amended Document",
+		]
 		if self.type in READ_PERMISSIONS:
 			self.requires_write_permissions = 0
 
@@ -186,6 +195,42 @@ class RavenAIFunction(Document):
 				"required": ["document_ids"],
 				"additionalProperties": False,
 			}
+		elif self.type == "Submit Document":
+			params = {
+				"type": "object",
+				"properties": {
+					"document_id": {
+						"type": "string",
+						"description": f"The ID of the {self.reference_doctype} to submit",
+					}
+				},
+				"required": ["document_id"],
+				"additionalProperties": False,
+			}
+		elif self.type == "Cancel Document":
+			params = {
+				"type": "object",
+				"properties": {
+					"document_id": {
+						"type": "string",
+						"description": f"The ID of the {self.reference_doctype} to cancel",
+					}
+				},
+				"required": ["document_id"],
+				"additionalProperties": False,
+			}
+		elif self.type == "Get Amended Document":
+			params = {
+				"type": "object",
+				"properties": {
+					"document_id": {
+						"type": "string",
+						"description": f"The ID of the {self.reference_doctype} to get the amended document for",
+					}
+				},
+				"required": ["document_id"],
+				"additionalProperties": False,
+			}
 		elif self.type == "Attach File to Document":
 			params = {
 				"type": "object",
@@ -207,7 +252,7 @@ class RavenAIFunction(Document):
 				"additionalProperties": False,
 			}
 		elif self.type == "Custom Function":
-			params = json.loads(self.params)
+			params = self.get_params_as_dict()
 		elif self.type == "Get List":
 			params = {
 				"type": "object",
@@ -360,6 +405,9 @@ class RavenAIFunction(Document):
 			"Update Multiple Documents",
 			"Delete Document",
 			"Delete Multiple Documents",
+			"Submit Document",
+			"Cancel Document",
+			"Get Amended Document",
 		]
 		if self.type in DOCUMENT_REF_FUNCTIONS:
 			if not self.reference_doctype:
@@ -375,11 +423,7 @@ class RavenAIFunction(Document):
 
 	def before_save(self):
 		# Generate the function definition from the variables + function name + description
-		if isinstance(self.params, str):
-			params = json.loads(self.params)
-
-		else:
-			params = self.params
+		params = self.get_params_as_dict()
 
 		function_definition = {
 			"name": self.function_name,
@@ -398,3 +442,10 @@ class RavenAIFunction(Document):
 		for bot in bots:
 			bot = frappe.get_doc("Raven Bot", bot)
 			bot.update_openai_assistant()
+
+	def get_params_as_dict(self):
+		if isinstance(self.params, dict):
+			return self.params
+		if isinstance(self.params, str):
+			return json.loads(self.params)
+		return {}

@@ -2,3 +2,4 @@
 linkpreview
 openai
 livekit-api
+blurhash-python

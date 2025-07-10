@@ -120,6 +120,20 @@ export const MessageItem = ({ message, setDeleteMessage, isHighlighted, onReplyM
     // @ts-ignore
     const CHAT_STYLE = window.frappe?.boot?.chat_style ?? 'Simple'
 
+    const [selectedText, setSelectedText] = useState('')
+
+    const onContextMenuChange = (open: boolean) => {
+        if (open) {
+            // Get the selection that te user is actually highlighting
+            const selection = document.getSelection()
+            if (selection) {
+                setSelectedText(selection.toString().trim())
+            }
+        } else {
+            setSelectedText('')
+        }
+    }
+
     return (
         <>
             {CHAT_STYLE === 'Left-Right' ? <LeftRightLayout
@@ -149,7 +163,7 @@ export const MessageItem = ({ message, setDeleteMessage, isHighlighted, onReplyM
                         top-[42px] 
                         left-6 z-0`}>
                         </div> : null}
-                    <ContextMenu.Root modal={false}>
+                    <ContextMenu.Root modal={false} onOpenChange={onContextMenuChange}>
                         <ContextMenu.Trigger
                             {...bind}
                             ref={ref}
@@ -173,7 +187,7 @@ export const MessageItem = ({ message, setDeleteMessage, isHighlighted, onReplyM
                             px-1
                             py-1.5
                             sm:p-1.5
-                            rounded-md`, is_continuation ? '' : 'py-2.5 sm:py-3', isHighlighted ? 'bg-yellow-50 hover:bg-yellow-50 dark:bg-yellow-300/20 dark:hover:bg-yellow-300/20' : !isDesktop && isHovered ? 'bg-gray-2 dark:bg-gray-3' : '', isEmojiPickerOpen ? 'bg-gray-2 dark:bg-gray-3' : '')}>
+                            rounded-md`, is_continuation ? '' : 'pt-2.5 sm:pt-3', isHighlighted ? 'bg-yellow-50 hover:bg-yellow-50 dark:bg-yellow-300/20 dark:hover:bg-yellow-300/20' : !isDesktop && isHovered ? 'bg-gray-2 dark:bg-gray-3' : '', isEmojiPickerOpen ? 'bg-gray-2 dark:bg-gray-3' : '')}>
                             <Flex className='gap-2.5 sm:gap-3 items-start'>
                                 <MessageLeftElement message={message} user={user} isActive={isActive} />
                                 <Flex direction='column' className='gap-0.5 w-[90%]' justify='center'>
@@ -190,7 +204,7 @@ export const MessageItem = ({ message, setDeleteMessage, isHighlighted, onReplyM
                                     {message.is_pinned === 1 && <Flex className='text-accent-9 text-xs' gap={'1'} align={'center'}><RiPushpinFill size='12' /> Pinned</Flex>}
                                     {/* If it's a reply, then show the linked message */}
                                     {linked_message && replied_message_details && <ReplyMessageBox
-                                        className='sm:min-w-[32rem] cursor-pointer mb-1'
+                                        className='sm:min-w-[28rem] cursor-pointer mb-1'
                                         role='button'
                                         onClick={() => onReplyMessageClick(linked_message)}
                                         message={replyMessageDetails} />
@@ -241,6 +255,7 @@ export const MessageItem = ({ message, setDeleteMessage, isHighlighted, onReplyM
                             onReply={onReply}
                             onForward={onForward}
                             onViewReaction={onViewReaction}
+                            selectedText={selectedText}
                             onAttachDocument={onAttachToDocument}
                         />
                     </ContextMenu.Root>

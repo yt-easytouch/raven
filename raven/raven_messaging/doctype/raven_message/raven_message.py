@@ -12,12 +12,18 @@ from pytz import timezone, utc
 
 from raven.ai.ai import handle_ai_thread_message, handle_bot_dm
 from raven.api.raven_channel import get_peer_user
-from raven.notification import send_notification_to_topic, send_notification_to_user
-from raven.utils import clear_thread_reply_count_cache, get_thread_reply_count, track_channel_visit
+from raven.notification import (
+	send_notification_for_message,
+	send_notification_to_topic,
+	send_notification_to_user,
+)
+from raven.utils import get_raven_room, refresh_thread_reply_count, track_channel_visit
 
 
 class RavenMessage(Document):
 	# begin: auto-generated types
+	# ruff: noqa
+
 	# This code is auto-generated. Do not modify anything in this block.
 
 	from typing import TYPE_CHECKING
@@ -27,6 +33,7 @@ class RavenMessage(Document):
 
 		from raven.raven_messaging.doctype.raven_mention.raven_mention import RavenMention
 
+		blurhash: DF.SmallText | None
 		bot: DF.Link | None
 		channel_id: DF.Link
 		content: DF.LongText | None
@@ -53,6 +60,7 @@ class RavenMessage(Document):
 		text: DF.LongText | None
 		thumbnail_height: DF.Data | None
 		thumbnail_width: DF.Data | None
+	# ruff: noqa
 	# end: auto-generated types
 
 	def before_validate(self):
@@ -92,6 +100,9 @@ class RavenMessage(Document):
 					break
 
 		self.content = text_content
+
+		if not self.content and self.link_doctype and self.link_document:
+			self.content = f"{self.link_doctype} - {self.link_document}"
 
 	def extract_mentions(self, soup):
 		"""
@@ -182,6 +193,8 @@ class RavenMessage(Document):
 
 		if self.message_type == "Text":
 			self.handle_ai_message()
+
+		self.send_push_notification()
 
 	def handle_ai_message(self):
 
@@ -294,7 +307,7 @@ class RavenMessage(Document):
 							"last_message_timestamp": self.creation,
 							"last_message_details": last_message_details,
 						},
-						user=peer_user_doc.user,
+						user=peer_user_doc.user_id,
 						after_commit=True,
 					)
 
@@ -315,10 +328,8 @@ class RavenMessage(Document):
 		elif channel_doc.is_thread:
 			# TODO: Might be a good idea to just send this to the users who are participants in the thread - maybe not a lot of users?
 
-			# Clear the thread reply count cache
-			clear_thread_reply_count_cache(self.channel_id)
 			# Get the number of replies in the thread
-			reply_count = get_thread_reply_count(self.channel_id)
+			reply_count = refresh_thread_reply_count(self.channel_id)
 			frappe.publish_realtime(
 				"thread_reply",
 				{
@@ -328,7 +339,7 @@ class RavenMessage(Document):
 					"number_of_replies": reply_count,
 				},
 				after_commit=True,
-				room="all",
+				room=get_raven_room(),
 			)
 		else:
 			# This event needs to be published to all users on Raven (desk + website)
@@ -343,56 +354,54 @@ class RavenMessage(Document):
 					"last_message_timestamp": self.creation,
 				},
 				after_commit=True,
-				room="all",
+				room=get_raven_room(),
 			)
 
 	def send_push_notification(self):
-		# TODO: Send Push Notification for the following:
+		# Send Push Notification for the following:
 		# 1. If the message is a direct message, send a push notification to the other user
 		# 2. If the message has mentions, send a push notification to the mentioned users if they belong to the channel
 		# 3. If the message is a reply, send a push notification to the user who is being replied to
 		# 4. If the message is in a channel, send a push notification to all the users in the channel (topic)
 
-		if self.message_type == "System":
+		if (
+			self.message_type == "System"
+			or self.flags.send_silently
+			or frappe.flags.in_test
+			or frappe.flags.in_install
+			or frappe.flags.in_patch
+			or frappe.flags.in_import
+		):
 			return
 
-		channel_doc = frappe.get_cached_doc("Raven Channel", self.channel_id)
-
-		if channel_doc.is_direct_message:
-			if not channel_doc.is_self_message:
-				# The message was sent on a direct message channel
-				self.send_notification_for_direct_message()
+		if frappe.request and hasattr(frappe.request, "after_response"):
+			frappe.request.after_response.add(lambda: send_notification_for_message(self))
 		else:
-			# The message was sent on a channel
-			self.send_notification_for_channel_message()
-			# channel_type = frappe.get_cached_value("Raven Channel", self.channel_id, "channel_type")
+			send_notification_for_message(self)
 
 	def get_notification_message_content(self):
 		"""
 		Gets the content of the message for the push notification
 		"""
 		if self.message_type == "File":
-			file_name = self.file.split("/")[-1]
-			return f"📄 Sent a file - {file_name}"
+			return f"📄 Sent a file - {self.content}"
 		elif self.message_type == "Image":
 			return "📷 Sent a photo"
 		elif self.message_type == "Poll":
 			return "📊 Sent a poll"
 		elif self.text:
-			# Check if the message is a GIF
-			if "<img src=https://media.tenor.com" in self.text:
-				return "Sent a GIF"
-			else:
-				return self.text
+			return self.content
 
-	def get_message_owner_name(self):
+	def get_message_owner_details(self):
 		"""
 		Get the full name of the message owner
 		"""
 		if self.is_bot_message:
-			return frappe.get_cached_value("Raven User", self.bot, "full_name")
+			doc = frappe.get_cached_doc("Raven User", self.bot)
+			return doc.full_name, doc.user_image
 		else:
-			return frappe.get_cached_value("Raven User", self.owner, "full_name")
+			doc = frappe.get_cached_doc("Raven User", self.owner)
+			return doc.full_name, doc.user_image
 
 	def send_notification_for_direct_message(self):
 		"""
@@ -415,11 +424,11 @@ class RavenMessage(Document):
 
 		message = self.get_notification_message_content()
 
-		owner_name = self.get_message_owner_name()
+		owner_name, owner_image = self.get_message_owner_details()
 
 		send_notification_to_user(
 			user_id=peer_raven_user_doc.user,
-			user_image_id=self.owner,
+			user_image_path=owner_image,
 			title=owner_name,
 			message=message,
 			data={
@@ -442,7 +451,7 @@ class RavenMessage(Document):
 
 		is_thread = frappe.get_cached_value("Raven Channel", self.channel_id, "is_thread")
 
-		owner_name = self.get_message_owner_name()
+		owner_name, owner_image = self.get_message_owner_details()
 
 		if is_thread:
 			title = f"{owner_name} in thread"
@@ -452,7 +461,7 @@ class RavenMessage(Document):
 
 		send_notification_to_topic(
 			channel_id=self.channel_id,
-			user_image_id=self.owner,
+			user_image_path=owner_image,
 			title=title,
 			message=message,
 			data={
@@ -463,28 +472,10 @@ class RavenMessage(Document):
 				"content": self.content if self.message_type == "Text" else self.file,
 				"from_user": self.owner,
 				"type": "New message",
+				"is_thread": "1" if is_thread else "0",
 				"creation": get_milliseconds_since_epoch(self.creation),
 			},
 		)
-
-	def send_notification_for_mentions(self, user):
-		try:
-			from frappe.push_notification import PushNotification
-
-			push_notification = PushNotification("raven")
-
-			if push_notification.is_enabled():
-				push_notification.send_notification_to_user(
-					user,
-					"You were mentioned",
-					self.content
-					# icon=f"{frappe.utils.get_url()}/assets/hrms/manifest/favicon-196.png",
-				)
-		except ImportError:
-			# push notifications are not supported in the current framework version
-			pass
-		except Exception:
-			frappe.log_error(frappe.get_traceback())
 
 	def after_delete(self):
 		frappe.publish_realtime(
@@ -504,7 +495,7 @@ class RavenMessage(Document):
 
 		# delete poll if the message is of type poll after deleting the message
 		if self.message_type == "Poll":
-			frappe.delete_doc("Raven Poll", self.poll_id)
+			frappe.delete_doc("Raven Poll", self.poll_id, ignore_permissions=True, delete_permanently=True)
 
 		# TEMP: this is a temp fix for the Desk interface
 		self.publish_deprecated_event_for_desk()
@@ -620,8 +611,6 @@ class RavenMessage(Document):
 				# track the visit of the user to the channel if a new message is created
 				track_channel_visit(channel_id=self.channel_id, user=self.owner)
 				# frappe.enqueue(method=track_channel_visit, channel_id=self.channel_id, user=self.owner)
-
-			self.send_push_notification()
 
 			# If this is a new messagge (only applicable for files in on_update), then handle the AI message
 			if self.message_type == "File" or self.message_type == "Image":

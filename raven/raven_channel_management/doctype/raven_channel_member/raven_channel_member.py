@@ -214,18 +214,16 @@ class RavenChannelMember(Document):
 		"""
 		Check if the notification preference is changed and update the subscription
 		"""
-		old_doc = self.get_doc_before_save()
-		if old_doc:
-			if old_doc.allow_notifications != self.allow_notifications:
-				is_direct_message = frappe.get_cached_value(
-					"Raven Channel", self.channel_id, "is_direct_message"
-				)
+		if self.has_value_changed("allow_notifications"):
+			is_direct_message = frappe.get_cached_value(
+				"Raven Channel", self.channel_id, "is_direct_message"
+			)
 
-				if not is_direct_message:
-					if self.allow_notifications:
-						subscribe_user_to_topic(self.channel_id, self.user_id)
-					else:
-						unsubscribe_user_to_topic(self.channel_id, self.user_id)
+			if not is_direct_message:
+				if self.allow_notifications:
+					subscribe_user_to_topic(self.channel_id, self.user_id)
+				else:
+					unsubscribe_user_to_topic(self.channel_id, self.user_id)
 
 		if self.has_value_changed("is_admin") and not self.flags.in_insert and not self.is_thread():
 			# Send a system message to the channel mentioning the member who became admin

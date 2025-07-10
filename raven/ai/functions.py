@@ -1,5 +1,5 @@
 import frappe
-from frappe import _
+from frappe import _, client
 
 
 def get_document(doctype: str, document_id: str):
@@ -7,7 +7,7 @@ def get_document(doctype: str, document_id: str):
 	Get a document from the database
 	"""
 	# Use the frappe.client.get method to get the document with permissions (both read and field level read)
-	return frappe.client.get(doctype, name=document_id)
+	return client.get(doctype, name=document_id)
 
 
 def get_documents(doctype: str, document_ids: list):
@@ -17,7 +17,7 @@ def get_documents(doctype: str, document_ids: list):
 	docs = []
 	for document_id in document_ids:
 		# Use the frappe.client.get method to get the document with permissions applied
-		docs.append(frappe.client.get(doctype, name=document_id))
+		docs.append(client.get(doctype, name=document_id))
 	return docs
 
 
@@ -107,6 +107,54 @@ def delete_documents(doctype: str, document_ids: list):
 	return {"document_ids": document_ids, "message": "Documents deleted", "doctype": doctype}
 
 
+def submit_document(doctype: str, document_id: str):
+	"""
+	Submit a document in the database
+	"""
+	doc = frappe.get_doc(doctype, document_id)
+	doc.submit()
+	return {
+		"document_id": document_id,
+		"message": f"{doctype} {document_id} submitted",
+		"doctype": doctype,
+	}
+
+
+def cancel_document(doctype: str, document_id: str):
+	"""
+	Cancel a document in the database
+	"""
+	doc = frappe.get_doc(doctype, document_id)
+	doc.cancel()
+	return {
+		"document_id": document_id,
+		"message": f"{doctype} {document_id} cancelled",
+		"doctype": doctype,
+	}
+
+
+def get_amended_document_id(doctype: str, document_id: str):
+	"""
+	Get the amended document for a given document
+	"""
+	amended_doc = frappe.db.exists(doctype, {"amended_from": document_id})
+	if amended_doc:
+		return amended_doc
+	else:
+		return {"message": f"{doctype} {document_id} is not amended"}
+
+
+def get_amended_document(doctype: str, document_id: str):
+	"""
+	Get the amended document for a given document
+	"""
+	amended_doc = frappe.db.exists(doctype, {"amended_from": document_id})
+	if amended_doc:
+		return client.get(doctype, name=document_id)
+	else:
+		return {"message": f"{doctype} {document_id} is not amended", "doctype": doctype}
+
+
 def attach_file_to_document(doctype: str, document_id: str, file_path: str):
 	"""
 	Attach a file to a document in the database
@@ -149,5 +197,15 @@ def get_list(doctype: str, filters: dict = None, fields: list = None, limit: int
 	if fields is None:
 		fields = ["*"]
 
+	else:
+		meta = frappe.get_meta(doctype)
+		filtered_fields = ["name as document_id"]
+		if "title" in fields:
+			filtered_fields.append(meta.get_title_field())
+
+		for field in fields:
+			if meta.has_field(field) and field not in filtered_fields:
+				filtered_fields.append(field)
+
 	# Use the frappe.get_list method to get the list of documents
-	return frappe.get_list(doctype, filters=filters, fields=fields, limit=limit)
+	return frappe.get_list(doctype, filters=filters, fields=filtered_fields, limit=limit)
